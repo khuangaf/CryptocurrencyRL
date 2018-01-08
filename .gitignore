@@ -1,0 +1,5 @@
+*.pyc
+*.csv
+*.json
+*.h5
+*.hdf5
