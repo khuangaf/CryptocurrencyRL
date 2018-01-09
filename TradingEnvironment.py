@@ -303,7 +303,7 @@ class TradingEnvironment(gym.Env):
         assert self.action_space.contains(
             action), 'action should be within %r but is %r' % (self.action_space, weights)
         np.testing.assert_almost_equal(
-            np.sum(weights), 1.0, 3, err_msg='weights should sum to 1. action="%s"' % weights)
+            np.sum(weights), 1.0, 3, err_msg='weights should sum to 1. action="%s"' % action)
 
         history, y1, done1 = self.src._step()
         

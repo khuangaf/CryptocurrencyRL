@@ -1,7 +1,6 @@
 from rl.agents.dqn import DQNAgent
 from rl.agents.ddpg import DDPGAgent
 from TradingEnvironment import *
-from rl.policy import LinearAnnealedPolicy, BoltzmannQPolicy, EpsGreedyQPolicy
 from rl.memory import SequentialMemory
 from rl.core import Processor
 from keras import applications
@@ -12,7 +11,7 @@ import tensorflow as tf
 import numpy as np
 import random
 from keras.layers import GRU, CuDNNGRU
-from keras.layers import Conv1D, MaxPooling1D
+from keras.layers import Conv1D, MaxPooling1D, GlobalMaxPooling1D
 from keras import backend as K
 import keras
 from rl.callbacks import FileLogger, ModelIntervalCheckpoint
@@ -50,27 +49,29 @@ units= 50
 
 # actor
 # actor = Sequential()
-# actor.add(GRU(units=units, input_shape=observation_space[1:],return_sequences=False))
+# actor.add(Flatten(input_shape=(1,) + env.observation_space.shape))
+# actor.add(Dense(16))
 # actor.add(Activation('relu'))
-# actor.add(Dropout(0.2))
-# actor.add(Dense(nb_actions, activation=K.softmax))
-# # model.add(Activation('softmax'))
+# actor.add(Dense(16))
+# actor.add(Activation('relu'))
+# actor.add(Dense(16))
+# actor.add(Activation('relu'))
+# actor.add(Dense(nb_actions))
+# actor.add(Activation('softmax'))
 # print(actor.summary())
-print env.observation_space.shape
 
 
-#actor
-actor = Sequential()
-actor.add(Flatten(input_shape= (1,)+env.observation_space.shape))
-actor.add(Dense(16))
-actor.add(Activation('relu'))
-actor.add(Dense(16))
-actor.add(Activation('relu'))
-actor.add(Dense(16))
-actor.add(Activation('relu'))
-actor.add(Dense(nb_actions))
-actor.add(Activation('softmax'))
-print(actor.summary())
+# actor
+inp = Input(shape=(1,) + env.observation_space.shape)
+x = Reshape([step_size, nb_features])(inp)
+# x = CuDNNGRU(10)(x)
+x = Conv1D(activation='relu', filters=8, kernel_size=3)(x)
+x = GlobalMaxPooling1D()(x)
+x = Activation('relu')(x)
+x = Dropout(0.1)(x)
+x = Dense(nb_actions, bias_initializer='ones')(x)
+x = Activation('softmax')(x)
+actor = Model(inputs=inp, outputs=x)
 
 # critic
 action_input = Input(shape=(nb_actions,), name='action_input')
@@ -88,6 +89,9 @@ x = Activation('linear')(x)
 
 critic = Model(inputs=[action_input, observation_input], outputs=x)
 
+# continue previous training
+# critic.load_weights('weight/dqn_weights_1750000_critic.h5f')
+# actor.load_weights('dqn_weights_1750000_actor.h5f')
     
 
 # Finally, we configure and compile our agent. You can use every built-in Keras optimizer and
@@ -102,16 +106,18 @@ ddpg = DDPGAgent(nb_actions=nb_actions, actor=actor, critic=critic, critic_actio
 
 # Okay, now it's time to learn something! We capture the interrupt exception so that training
 # can be prematurely aborted. Notice that you can the built-in Keras callbacks!
-weights_filename = 'weights/dqn_weights.h5f'
-checkpoint_weights_filename = 'weights/dqn_weights_{step}.h5f'
-log_filename = 'logs/dqn_log.json'
+weights_filename = 'weights/ddpg_weights.h5f'
+checkpoint_weights_filename = 'weights/ddpg_weights_{step}.h5f'
+log_filename = 'logs/ddpg_log.json'
 callbacks = [ModelIntervalCheckpoint(checkpoint_weights_filename, interval=250000)]
 callbacks += [FileLogger(log_filename, interval=100)]
 ddpg.compile(Adam(lr=.001), metrics=['mae'])
-ddpg.fit(env, callbacks=callbacks, nb_steps=1750000, log_interval=10000, verbose=1)
+
+
+ddpg.fit(env, callbacks=callbacks, nb_steps=17500000, log_interval=10000, verbose=1)
 
 # After training is done, we save the final weights one more time.
-dqn.save_weights(weights_filename, overwrite=True)
+ddpg.save_weights(weights_filename, overwrite=True)
 
 # Finally, evaluate our algorithm for 10 episodes.
-dqn.test(env, nb_episodes=10, visualize=False)
+ddpg.test(env, nb_episodes=10, visualize=False)
