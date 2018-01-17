@@ -301,9 +301,9 @@ class TradingEnvironment(gym.Env):
         # print weights
         # Sanity checks
         assert self.action_space.contains(
-            action), 'action should be within %r but is %r' % (self.action_space, weights)
+            weights), 'action should be within %r but is %r' % (self.action_space, weights)
         np.testing.assert_almost_equal(
-            np.sum(weights), 1.0, 3, err_msg='weights should sum to 1. action="%s"' % action)
+            np.sum(weights), 1.0, 3, err_msg='weights should sum to 1. action="%s"' % weights)
 
         history, y1, done1 = self.src._step()
         
@@ -328,7 +328,7 @@ class TradingEnvironment(gym.Env):
                 0, 0], [0, 0]], mode='constant')
         elif self.output_mode == 'mlp':
             history = history.flatten()
-        # print history.shape
+        # print (history.shape)
         return history, reward, done1 or done2, info
 
     def _reset(self):

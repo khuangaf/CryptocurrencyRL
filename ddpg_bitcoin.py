@@ -6,7 +6,7 @@ from rl.core import Processor
 from keras import applications
 from keras.models import Sequential
 from keras.models import Model
-from keras.layers import Dropout, Flatten, Dense, Activation, Reshape, Input,Concatenate
+from keras.layers import Dropout, Flatten, Dense, Activation, Reshape, Input,Concatenate, GaussianDropout
 import tensorflow as tf
 import numpy as np
 import random
@@ -65,14 +65,16 @@ units= 50
 inp = Input(shape=(1,) + env.observation_space.shape)
 x = Reshape([step_size, nb_features])(inp)
 # x = CuDNNGRU(10)(x)
-x = Conv1D(activation='relu', filters=8, kernel_size=3)(x)
+x = Conv1D(activation='relu', filters=32, kernel_size=3)(x)
 x = GlobalMaxPooling1D()(x)
+x = GaussianDropout(0.3)(x)
+x = Dense(16)(x)
 x = Activation('relu')(x)
-x = Dropout(0.1)(x)
+x = GaussianDropout(0.3)(x)
 x = Dense(nb_actions, bias_initializer='ones')(x)
 x = Activation('softmax')(x)
 actor = Model(inputs=inp, outputs=x)
-
+print actor.summary()
 # critic
 action_input = Input(shape=(nb_actions,), name='action_input')
 observation_input = Input(shape=(1,) + env.observation_space.shape, name='observation_input')
@@ -97,12 +99,12 @@ critic = Model(inputs=[action_input, observation_input], outputs=x)
 # Finally, we configure and compile our agent. You can use every built-in Keras optimizer and
 # even the metrics!
 memory = SequentialMemory(limit=1000000, window_length=1)
-
+random_process = OrnsteinUhlenbeckProcess(size=nb_actions, theta=.15, mu=0., sigma=0.05)
 
 # build agent
 ddpg = DDPGAgent(nb_actions=nb_actions, actor=actor, critic=critic, critic_action_input=action_input,
                   memory=memory, nb_steps_warmup_critic=100, nb_steps_warmup_actor=100,
-                   gamma=.99, target_model_update=1e-3)
+                  gamma=.99, target_model_update=1e-3)
 
 # Okay, now it's time to learn something! We capture the interrupt exception so that training
 # can be prematurely aborted. Notice that you can the built-in Keras callbacks!
