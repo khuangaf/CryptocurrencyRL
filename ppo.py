@@ -24,7 +24,7 @@ import tensorflow as tf
 import sys
 import argparse
 from baselines import bench, logger
-
+import _pickle  as pickle
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
@@ -42,7 +42,10 @@ def train(num_timesteps, seed, policy):
     config.gpu_options.allow_growth = True #pylint: disable=E1101
     gym.logger.setLevel(logging.WARN)
     tf.Session(config=config).__enter__()
-    df = pd.read_csv('data/historical_bitcoin.csv').set_index('date')
+    with open('data/allcoins.p', 'rb') as fp:
+        df_list = pickle.load(fp, encoding='latin1')
+    with open('data/times.p','rb') as fp:
+        times = pickle.load(fp, encoding='latin1')
     # logger.info('rank {}: seed={}, logdir={}'.format(rank, seed, logger.get_dir()))
     
     # nb_actions = env.action_space.shape[0]
@@ -64,7 +67,7 @@ def train(num_timesteps, seed, policy):
             return wrap_deepmind(env)
         return env_fn
     def make_env():
-        env = TradingEnvironment(df=df)
+        env = TradingEnvironment(df_list=df_list, times =times)
         env = bench.Monitor(env, logger.get_dir())
         return env
     nenvs = 8
@@ -88,7 +91,8 @@ def main():
     parser.add_argument('--policy', help='Policy architecture', choices=['cnn', 'lstm', 'lnlstm'], default='cnn')
     parser.add_argument('--num-timesteps', type=int, default=int(10e6))
     args = parser.parse_args()
-    logger.configure(dir='./logs/ppo')
+    logger.configure(dir='./logs/ppo_4coins')
+    # logger.configure()
     train(num_timesteps=args.num_timesteps, seed=args.seed,
         policy=args.policy)
 

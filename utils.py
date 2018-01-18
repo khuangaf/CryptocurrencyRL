@@ -46,8 +46,8 @@ def ortho_init(scale=1.0):
 def conv(x, scope, nf, rf, stride, pad='VALID', act=tf.nn.relu, init_scale=1.0):
     with tf.variable_scope(scope):
         nin = x.get_shape()[3].value
-        # w = tf.get_variable("w", [rf, rf, nin, nf], initializer=ortho_init(init_scale))
-        w = tf.get_variable("w", [1, 1, rf, nf], initializer=ortho_init(init_scale))
+        w = tf.get_variable("w", [rf, rf, nin, nf], initializer=ortho_init(init_scale))
+        # w = tf.get_variable("w", [1, 1, rf, nf], initializer=ortho_init(init_scale))
         b = tf.get_variable("b", [nf], initializer=tf.constant_initializer(0.0))
         
         z = tf.nn.conv2d(x, w, strides=[1, 1, stride, 1], padding=pad)+b

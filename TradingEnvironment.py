@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class DataSrc(object):
     """Acts as data provider for each new episode."""
 
-    def __init__(self, df, steps=252, scale=True, scale_extra_cols=True, augment=0.00, window_length=50):
+    def __init__(self, df_list, times, steps=252, scale=True, scale_extra_cols=True, augment=0.00, window_length=50):
         """
         DataSrc.
         df - csv for data frame index of timestamps
@@ -34,29 +34,43 @@ class DataSrc(object):
         self.scale = scale
         # self.scale_extra_cols = scale_extra_cols
         self.window_length = window_length
-        self.asset_names = ['BTC']
-        # get rid of NaN's
-        df = df.copy()
-        df.replace(np.nan, 0, inplace=True)
-        df = df.fillna(method="pad")
+#         '''for BTC only'''
+#         self.asset_names = ['BTC']
+#         # get rid of NaN's
+#         df = df.copy()
+#         df.replace(np.nan, 0, inplace=True)
+#         df = df.fillna(method="pad")
+
+#         # dataframe to matrix
+#         print (df.columns)
+#         self.features = df.columns
+#         data = df.as_matrix().reshape(
+#             (len(df), 1, len(self.features)))
+#         self._data = np.transpose(data, (1, 0, 2))
+#         self._times = df.index
+
+#         self.price_columns = ['close', 'high', 'low', 'open']
+        '''for 4 coins'''
+        self.asset_names = ['BTC', 'LTC', 'ETH', 'XMR']
+        
+        df_list = df_list.copy()
+        self.features = df_list[0].columns
+        df_list = [ np.expand_dims(df, 1)for df in df_list]
+        # shape = (total timesteps, num_coins, num_features)
+        data = np.hstack(df_list)
+        
+        # df.replace(np.nan, 0, inplace=True)
+        # df = df.fillna(method="pad")
 
         # dataframe to matrix
         
-        self.features = df.columns
-        data = df.as_matrix().reshape(
-            (len(df), 1, len(self.features)))
+        
+        # data = df.as_matrix().reshape(
+        #     (len(df), 1, len(self.features)))
         self._data = np.transpose(data, (1, 0, 2))
-        self._times = df.index
+        self._times = times
 
-        self.price_columns = ['close', 'high', 'low', 'open']
-        # self.non_price_columns = set(
-        #     df.columns.levels[1]) - set(self.price_columns)
-
-        # Stats to let us normalize non price columns
-        # if scale_extra_cols:
-        #     x = self._data.reshape((-1, len(self.features)))
-        #     self.stats = dict(mean=x.mean(0), std=x.std(0))
-            
+        self.price_columns = ['close', 'high', 'low', 'open']    
 
         self.reset()
 
@@ -205,7 +219,8 @@ class TradingEnvironment(gym.Env):
     metadata = {'render.modes': ['notebook', 'ansi']}
 
     def __init__(self,
-                 df,
+                 df_list,
+                 times,
                  steps=256,
                  trading_cost=0.0025,
                  time_cost=0.00,
@@ -233,7 +248,7 @@ class TradingEnvironment(gym.Env):
             scale - scales price data by last opening price on each episode (except return)
             scale_extra_cols - scales non price data using mean and std for whole dataset
         """
-        self.src = DataSrc(df=df, steps=steps, scale=scale, scale_extra_cols=scale_extra_cols,
+        self.src = DataSrc(df_list=df_list, times= times, steps=steps, scale=scale, scale_extra_cols=scale_extra_cols,
                            augment=augment, window_length=window_length)
         self._plot = self._plot2 = self._plot3 = None
         self.output_mode = output_mode
@@ -314,7 +329,7 @@ class TradingEnvironment(gym.Env):
             [inf["market_return"] for inf in self.infos + [info]])[-1]
         # add dates
         # info['date'] = pd.to_datetime(self.src.times[self.src.step],unit='s')
-        info['date'] = self.src.times[self.src.step]
+        # info['date'] = self.src.times[self.src.step]
         info['steps'] = self.src.step
 
         self.infos.append(info)
