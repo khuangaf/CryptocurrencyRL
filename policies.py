@@ -102,18 +102,19 @@ class CnnPolicy(object):
         ob_shape = (nbatch, nh, nw, nc)
         print (ob_shape)
         # nact = ac_space.n
-        # print (ob_shape)
+        print (ac_space)
+        
         nact = ac_space.shape[0]
         X = tf.placeholder(tf.float32, ob_shape) #obs
         with tf.variable_scope("model", reuse=reuse):
             h = conv(tf.cast(X, tf.float32), 'c1', nf=16, rf=3, stride=4, init_scale=np.sqrt(2))
-            max1=tf.nn.max_pool(h, ksize=(1,2,2,1), padding='VALID', strides= (1,1,1,1))
-            
+            # max1=tf.nn.max_pool(h, ksize=(1,2,2,1), padding='VALID', strides= (1,1,1,1))
+            r = tf.nn.relu(h)
             # h2 = conv(h, 'c2', nf=8, rf=16, stride=2, init_scale=np.sqrt(2))
             # h3 = conv(h2, 'c3', nf=4, rf=8, stride=1, init_scale=np.sqrt(2))
-            h3 = conv_to_fc(max1)
+            h3 = conv_to_fc(r)
             h4 = fc(h3, 'fc1', nh=64, init_scale=np.sqrt(2))
-            p = fc(h4, 'pi', 5, act=lambda x:x, init_scale=0.01)
+            p = fc(h4, 'pi', nact, act=lambda x:x, init_scale=0.01)
             pi = tf.nn.softmax(p)
             vf = fc(h4, 'v', 1, act=lambda x:x)[:,0]
 
@@ -122,14 +123,12 @@ class CnnPolicy(object):
         
         # a0 = self.pd.sample()
         a0 = pi
+        
         # print (softmax_sample(pi))
-        # print ("a0")
+        print ("a0")
         # print (self.pd)
-        # print (a0)
-        # print (pi)
-        # print (h)
-        # print ("nact")
-        # print (nact)
+        print (a0)
+
         neglogp0 = self.pd.neglogp(a0)
         self.initial_state = None
 
@@ -151,23 +150,46 @@ class MlpPolicy(object):
     def __init__(self, sess, ob_space, ac_space, nbatch, nsteps, reuse=False): #pylint: disable=W0613
         ob_shape = (nbatch,) + ob_space.shape
         actdim = ac_space.shape[0]
+        print (ob_space)
+        print (ac_space)
+        
+        window_length = ob_space.shape[1] -1
+
         X = tf.placeholder(tf.float32, ob_shape, name='Ob') #obs
+
         with tf.variable_scope("model", reuse=reuse):
-            h1 = fc(X, 'pi_fc1', nh=64, init_scale=np.sqrt(2), act=tf.tanh)
-            h2 = fc(h1, 'pi_fc2', nh=64, init_scale=np.sqrt(2), act=tf.tanh)
-            pi = fc(h2, 'pi', actdim, act=lambda x:x, init_scale=0.01)
-            h1 = fc(X, 'vf_fc1', nh=64, init_scale=np.sqrt(2), act=tf.tanh)
-            h2 = fc(h1, 'vf_fc2', nh=64, init_scale=np.sqrt(2), act=tf.tanh)
-            vf = fc(h2, 'vf', 1, act=lambda x:x)[:,0]
+            w0 = tf.slice(X, [0,0,0,0],[-1,-1,1,1])
+            x = tf.slice(X, [0,0,1,0],[-1,-1,-1,-1])
+            x = conv(tf.cast(x, tf.float32),'c1', fh=1,fw=3,nf=3, stride=1, init_scale=np.sqrt(2))
+            print (x)
+            x = conv(x, 'c2', fh=1, fw=window_length -2, nf=20, stride= window_length -2, init_scale=np.sqrt(2))
+            print (x)
+            x = tf.concat([x, w0], 3)
+            print (x)
+            x = conv(x, 'c3', fh=1, fw=1, nf=1, stride= 1, init_scale=np.sqrt(2))
+            print (x)
+            cash_bias = tf.ones([x.shape[0],1,1,1], tf.float32)
+            c = tf.concat([cash_bias, x], 1)
+            
+            v = conv_to_fc(x)
+            vf = fc(v, 'v',1)[:,0]
+            print (v)
+            f = tf.contrib.layers.flatten(c)
+            print (f)
+            pi = tf.nn.softmax(f)
+            print (pi)
             logstd = tf.get_variable(name="logstd", shape=[1, actdim], 
-                initializer=tf.zeros_initializer())
+                initializer=tf.truncated_normal_initializer())
 
         pdparam = tf.concat([pi, pi * 0.0 + logstd], axis=1)
 
         self.pdtype = make_pdtype(ac_space)
         self.pd = self.pdtype.pdfromflat(pdparam)
-
+        # print (pdparam)
+        # print (self.pd)
         a0 = self.pd.sample()
+        a0 = tf.nn.softmax(a0)
+        # print (a0)
         neglogp0 = self.pd.neglogp(a0)
         self.initial_state = None
 

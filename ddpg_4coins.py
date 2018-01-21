@@ -1,6 +1,6 @@
 from rl.agents.dqn import DQNAgent
 from rl.agents.ddpg import DDPGAgent
-from TradingEnvironment import *
+from Env import *
 from rl.memory import SequentialMemory
 from rl.core import Processor
 from keras import applications
@@ -35,13 +35,14 @@ config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 set_session(tf.Session(config=config))
 
-with open('data/allcoins.p', 'rb') as fp:
-    df_list = pickle.load(fp, encoding='latin1')
-with open('data/times.p','rb') as fp:
-    times = pickle.load(fp, encoding='latin1')
-env = TradingEnvironment(df_list=df_list, times=times)
+# with open('data/allcoins.p', 'rb') as fp:
+#     df_list = pickle.load(fp, encoding='latin1')
+# with open('data/times.p','rb') as fp:
+#     times = pickle.load(fp, encoding='latin1')
+# env = PortfolioEnv(df_list=df_list, times=times)
+df_train = pd.read_hdf('./data/poloniex_30m.hf',key='train')
 
-
+# df_list = df_list[1:]
 nb_actions = env.action_space.shape[0]
 observation_space= env.observation_space.shape
 print (nb_actions)
@@ -69,12 +70,12 @@ inp = Input(shape=(1,) + env.observation_space.shape)
 x = Reshape(env.observation_space.shape)(inp)
 x = Conv2D(activation='relu', filters=16, kernel_size=(1,2))(x)
 x = MaxPooling2D()(x)
-x = GaussianDropout(0.1)(x)
+x = Dropout(0.1)(x)
 x = Flatten()(x)
 x = Dense(16)(x)
 x = Activation('relu')(x)
-x = GaussianDropout(0.1)(x)
-x = Dense(nb_actions, bias_initializer='ones')(x)
+x = Dropout(0.1)(x)
+x = Dense(nb_actions)(x)
 x = Activation('softmax')(x)
 actor = Model(inputs=inp, outputs=x)
 print (actor.summary())
