@@ -5,7 +5,7 @@ from baselines.common.distributions import make_pdtype
 
 def softmax(w, t=1.0):
     """softmax that avoid inf/ nan."""
-    eps = 1e-7
+    eps = 1e-11
     log_eps = np.log(eps)
     w = tf.clip_by_value(w, -log_eps, log_eps)  # avoid inf/nan
     e = tf.exp(w / t)
@@ -45,25 +45,32 @@ class CnnPolicy(object):
             c = tf.concat([cash_bias, x], 1)
             
             v = conv_to_fc(x)
-            vf = fc(v, 'v',1)[:,0]
+            
+            
+            # vf = fc(v, 'v',1)[:,0]
        
             f = tf.contrib.layers.flatten(c)
-       
+            eps = 1e15
+            # f = tf.clip_by_value(f, -eps, eps, 'clip1')
+            f = tf.nn.relu(f)
+            
+            vf = fc(f, 'v',1)[:,0]
             pi = tf.nn.softmax(f)
-       
+           
             logstd = tf.get_variable(name="logstd", shape=[1, actdim], 
                 initializer=tf.truncated_normal_initializer())
-
+        
         pdparam = tf.concat([pi, pi * 0.0 + logstd], axis=1)
 
         self.pdtype = make_pdtype(ac_space)
         self.pd = self.pdtype.pdfromflat(pdparam)
 
         a0 = self.pd.sample()
+        # a0 = tf.clip_by_value(a0, -eps, eps, 'clip2')
         a0 = tf.nn.softmax(a0) 
         
         
-        # a0 = tf.clip_by_value(a0, -eps, eps, 'clip')
+        
         
         neglogp0 = self.pd.neglogp(a0)
         self.initial_state = None

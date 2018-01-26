@@ -6,3 +6,4 @@
 *.h5f
 *.txt
 *.hf
+logs/*

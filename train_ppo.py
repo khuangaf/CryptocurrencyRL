@@ -34,7 +34,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 # config.gpu_options.allow_growth = True
 # set_session(tf.Session(config=config))
 
-def train(df, num_timesteps, seed, policy=CnnPolicy, training=True):
+def train(df, num_timesteps, seed, policy=CnnPolicy, training=True, load_path=None):
     
     # configure GPU usage
     ncpu = multiprocessing.cpu_count()
@@ -65,23 +65,21 @@ def train(df, num_timesteps, seed, policy=CnnPolicy, training=True):
     set_global_seeds(seed)
 
     ppo2.learn(policy=policy, env=env, nsteps=128, nminibatches=4,
-        lam=0.95, gamma=0.99, noptepochs=4, log_interval=1000,
+        lam=0.95, gamma=0.99, noptepochs=4, log_interval=1000, save_interval=5000,
         ent_coef=.01,
         lr=lambda f : f * 2.5e-4,
         cliprange=lambda f : f * 0.1,
-        total_timesteps=int(num_timesteps * 1.1), training=training)
+        total_timesteps=int(num_timesteps * 1.1), training=training, load_path=load_path)
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     parser.add_argument('--num-timesteps', type=int, default=int(8e5))
     args = parser.parse_args()
-    logger.configure(dir='./logs/ppo_train_unclip')
+    logger.configure(dir='./logs/ppo_train_relu')
     df = pd.read_hdf('./data/poloniex_30m.hf',key='train')
-    train(df, num_timesteps=int(60000000), seed=args.seed, training=True)
-    logger.configure(dir='./logs/ppo_test_unclip')
-    df = pd.read_hdf('./data/poloniex_30m.hf',key='test')
-    train(df, num_timesteps=48*7, seed=args.seed, training=False)
+    train(df, num_timesteps=10000000000, seed=args.seed, training=True)
+    
 
 if __name__ == '__main__':
     main()
