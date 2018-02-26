@@ -64,7 +64,7 @@ class TFOpenAIGymCust(OpenAIGym):
     def __init__(self, gym_id, gym):
         self.gym_id = gym_id
         self.gym = gym
-        self.monitor= log_dir
+        # self.monitor= log_dir
         self.visualize = None
         
 from Env import PortfolioEnv
@@ -263,8 +263,26 @@ exploration=dict(
 )
 # from tensorforce.core.explorations.epsilon_anneal import EpsilonAnneal
 # explorations_spec=EpsilonAnneal(initial_epsilon=1.0, final_epsilon=0.005, timesteps=1e5, start_timestep=0)
+summary_spec = dict(directory=log_dir, 
+                        steps=50,
+                        labels=[
+                            'configuration',
+                            'gradients_scalar',
+                            'regularization',
+                            'inputs',
+                            'losses',
+#                             'variables'
+                        ]
+                    )
+explorations_spec=dict(
+    type="epsilon_anneal",
+    initial_epsilon=1.0,
+    final_epsilon= 0.005,
+    timesteps= int(1e5),
+    start_timestep=0,
+)
 
-# exploration = tensorforce.core.explorations.EpsilonAnneal(**exploration)
+distributions_spec=None
 config = dict( 
     type= "ppo_agent",
     batch_size=batch_size,
@@ -320,7 +338,7 @@ config = dict(
     # summary_logdir = log_dir, # string directory to write tensorflow summaries. Default None
     # summary_labels=['total-loss'],
     # summary_frequency=10,
-    
+    summary_spec=summary_spec
     # TensorFlow distributed configuration
     # cluster_spec=None,
     # parameter_server=False,
@@ -332,20 +350,64 @@ config = dict(
 # config['exloratoins_spec'] = exploration
 # I want to use a gaussian dist instead of beta, we will apply post processing to scale everything
 actions_spec = environment.actions.copy()
+
 del actions_spec["min_value"]
 del actions_spec["max_value"]
 
 # Create an agent
 from tensorforce.agents import Agent
-agent = Agent.from_spec(
-    spec=config,
-    kwargs=dict(
-        states_spec=environment.states,
-        actions_spec=actions_spec,
-        network_spec=network_spec
-    )
+# agent = Agent.from_spec(
+#     spec=config,
+#     kwargs=dict(
+#         states_spec=environment.states,
+#         actions_spec=actions_spec,
+#         network_spec=network_spec
+#     )
+# )
+
+
+agent = PPOAgent(
+    states_spec=environment.states,
+    actions_spec=actions_spec,
+    network_spec=network_spec,
+    batch_size=4096,
+    saver_spec = dict(
+        directory=save_path, 
+        steps=100000, 
+#         basename=os.path.basename(save_path)
+    ),
+    # Agent
+    states_preprocessing_spec=None,
+    explorations_spec=explorations_spec,
+    reward_preprocessing_spec=None,
+    # BatchAgent
+    keep_last_timestep=True,
+    # PPOAgent
+    step_optimizer=dict(
+        type='adam',
+        learning_rate=1e-3
+    ),
+    optimization_steps=10,
+    # Model
+    scope='ppo',
+    discount=0.99,
+    # DistributionModel
+    distributions_spec=distributions_spec,
+    entropy_regularization=0.01, # 0 and 0.01 in baselines
+    # PGModel
+    baseline_mode='states',
+    baseline=dict(
+        type="EIIE",
+        layers_spec=network_spec
+#         update_batch_size=512,
+    ), # string indicating the baseline value function (currently 'linear' or 'mlp').
+    baseline_optimizer=dict(type='adam', learning_rate=0.003),
+    gae_lambda=0.97,
+    # PGLRModel
+    likelihood_ratio_clipping=0.2,
+    # summary_spec=summary_spec,
+    distributed_spec=None
 )
-agent
 report_episodes = 100
 from tensorforce.execution import Runner
 # from callbacks import *

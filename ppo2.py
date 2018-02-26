@@ -25,41 +25,61 @@ class Model(object):
         OLDVPRED = tf.placeholder(tf.float32, [None])
         LR = tf.placeholder(tf.float32, [])
         CLIPRANGE = tf.placeholder(tf.float32, [])
-
+        
         neglogpac = train_model.pd.neglogp(A)
         entropy = tf.reduce_mean(train_model.pd.entropy())
 
         vpred = train_model.vf
         vpredclipped = OLDVPRED + tf.clip_by_value(train_model.vf - OLDVPRED, - CLIPRANGE, CLIPRANGE)
+        
         vf_losses1 = tf.square(vpred - R)
         vf_losses2 = tf.square(vpredclipped - R)
         vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
+        
         ratio = tf.exp(OLDNEGLOGPAC - neglogpac)
         pg_losses = -ADV * ratio
         pg_losses2 = -ADV * tf.clip_by_value(ratio, 1.0 - CLIPRANGE, 1.0 + CLIPRANGE)
         pg_loss = tf.reduce_mean(tf.maximum(pg_losses, pg_losses2))
+        
         approxkl = .5 * tf.reduce_mean(tf.square(neglogpac - OLDNEGLOGPAC))
         clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), CLIPRANGE)))
-        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
+        reg_loss=0
         with tf.variable_scope('model'):
             params = tf.trainable_variables()
+            
+        for p in params:    
+            reg_loss += tf.nn.l2_loss(p) * 1e-6 + tf.reduce_sum(p) * 1e-6
+        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef + reg_loss
         grads = tf.gradients(loss, params)
+        
         if max_grad_norm is not None:
             grads, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
-        grads = list(zip(grads, params))
-        trainer = tf.train.AdamOptimizer(learning_rate=LR, epsilon=1e-5)
-        _train = trainer.apply_gradients(grads)
+        grads_ = list(zip(grads, params))
+        trainer = tf.train.AdamOptimizer(learning_rate=LR, epsilon=1e-4)
+        _train = trainer.apply_gradients(grads_)
+        logstd = train_model.pd.logstd
+        mean = train_model.pd.mean
 
         def train(lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None):
             advs = returns - values
             advs = (advs - advs.mean()) / (advs.std() + 1e-8)
+            
+            # print ("returns: "+str(returns))
+            # # print ("actions: "+str(actions))
+            # with open('logs/logstd_eps1e-2.txt','a') as f:
+            #     f.write("advs: {}\n".format(advs))
+            #     f.write("actions: {}\n".format(actions))
             td_map = {train_model.X:obs, A:actions, ADV:advs, R:returns, LR:lr, 
                     CLIPRANGE:cliprange, OLDNEGLOGPAC:neglogpacs, OLDVPRED:values}
             if states is not None:
                 td_map[train_model.S] = states
                 td_map[train_model.M] = masks
+            p, v, e = sess.run( [pg_loss, vf_loss, entropy], td_map)
+            # print ("pg_loss: "+str(p))
+            # print ("vf_loss: "+str(v))
+            # print ("entropy: "+str(e))
             return sess.run(
-                [pg_loss, vf_loss, entropy, approxkl, clipfrac, _train],
+                [pg_loss, vf_loss, entropy, approxkl, clipfrac, vf_loss,pg_loss, mean,neglogpac, logstd,pg_losses, loss, grads_, entropy, grads, _train],
                 td_map
             )[:-1]
         self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
@@ -96,15 +116,24 @@ class Runner(object):
         self.gamma = gamma
         self.lam = lam
         self.nsteps = nsteps
+        
         self.states = model.initial_state
+        
         self.dones = [False for _ in range(nenv)]
 
     def run(self):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [],[],[],[],[],[]
         mb_states = self.states
         epinfos = []
-        for _ in range(self.nsteps):
-            actions, values, self.states, neglogpacs = self.model.step(self.obs, self.states, self.dones)
+        for i in range(self.nsteps):
+            actions, values, self.states, neglogpacs, logstd, pi = self.model.step(self.obs, self.states, self.dones)
+            # if i ==0:
+            #     with open('logs/logstd.txt','a') as f:
+            #         f.write("pi: "+str(pi)+"\n")
+            #         f.write("logstd: "+str(logstd)+"\n")
+            #         f.write("values: "+str(values)+"\n")
+            #         f.write("neglogpacs: "+str(neglogpacs)+"\n")
+                    
             mb_obs.append(self.obs.copy())
             mb_actions.append(actions)
             mb_values.append(values)
@@ -204,7 +233,24 @@ def learn(*, policy, env, nsteps, total_timesteps, ent_coef, lr,
                     end = start + nbatch_train
                     mbinds = inds[start:end]
                     slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
-                    mblossvals.append(model.train(lrnow, cliprangenow, *slices))
+                    mt = model.train(lrnow, cliprangenow, *slices) 
+                    # if start == 0:
+                        # print ("grad_: {}".format(mt[-2]))
+                        # print ("grads: {}".format(mt[-3]))
+                        # print ("entropy: {}".format(mt[-2]))
+                    with open('logs/logstd_eps1e-3.txt','a') as f:
+                        f.write("vfloss: "+str(mt[-10])+"\n")
+                        f.write("pgloss: "+str(mt[-9])+"\n")
+                        f.write("mean: "+str(mt[-8][0])+"\n")
+                        f.write("neglogpr: "+str(mt[-7])+"\n")
+                        f.write("logstd: "+str(mt[-6][0])+"\n")
+                        f.write("pglosses: "+str(mt[-5])+"\n")
+                        f.write("loss: "+str(mt[-4])+"\n")
+                        f.write("grads_: "+str(mt[-3][-1])+"\n")
+                        f.write("entropy: "+str(mt[-2])+"\n")
+                        f.write("-------------------------------------------------\n")
+                        
+                    mblossvals.append(mt[:-10])
         else: # recurrent version
             assert nenvs % nminibatches == 0
             envsperbatch = nenvs // nminibatches

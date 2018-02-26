@@ -28,7 +28,7 @@ import _pickle  as pickle
 from wrapper.concat_states import ConcatStates
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
 os.environ['CUDA_VISIBLE_DEVICES'] = '3'
-os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
+# os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 
 # config = tf.ConfigProto()
 # config.gpu_options.allow_growth = True
@@ -76,9 +76,9 @@ def main():
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     parser.add_argument('--num-timesteps', type=int, default=int(8e5))
     args = parser.parse_args()
-    logger.configure(dir='./logs/ppo_train_relu')
+    logger.configure(dir='./logs/ppo_train_relu_con_con')
     df = pd.read_hdf('./data/poloniex_30m.hf',key='train')
-    train(df, num_timesteps=10000000000, seed=args.seed, training=True)
+    train(df, num_timesteps=100000000000, seed=args.seed, training=True, load_path='./logs/ppo_train_relu_con/checkpoints/40000')
     
 
 if __name__ == '__main__':

@@ -51,7 +51,7 @@ def conv(x, scope, fh,fw, nf, stride, pad='VALID', act=tf.nn.relu, init_scale=1.
         w = tf.get_variable("w", [fh, fw, nin, nf], initializer=ortho_init(init_scale))
         # w = tf.get_variable("w", [1, 1, rf, nf], initializer=ortho_init(init_scale))
         b = tf.get_variable("b", [nf], initializer=tf.constant_initializer(0.0))
-        print (stride)
+        
         z = tf.nn.conv2d(x, w, strides=[1, 1, stride, 1], padding=pad)+b
         h = act(z)
         return h
@@ -69,8 +69,9 @@ def fc(x, scope, nh, act=tf.nn.relu, init_scale=1.0):
     with tf.variable_scope(scope):
         nin = x.get_shape()[1].value
         w = tf.get_variable("w", [nin, nh], initializer=ortho_init(init_scale))
-        b = tf.get_variable("b", [nh], initializer=tf.constant_initializer(0.0))
+        b = tf.get_variable("b", [nh], initializer=tf.zeros_initializer())
         z = tf.matmul(x, w)+b
+        
         h = act(z)
         return h
 
